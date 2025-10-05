@@ -52,7 +52,7 @@ SMTP_USER=
 SMTP_PASS=
 FROM_EMAIL="Ledgerly <noreply@ledgerly.local>"
 ```
-4) Frontend setup (React + Vite)
+##4) Frontend setup (React + Vite)
 ```
 cd frontend
 npm install
@@ -62,7 +62,7 @@ npm run dev
 App: http://localhost:5173
 ```
 
-5) How to use (end-to-end)
+##5) How to use (end-to-end)
 
 Register a new account (email + password) → you are logged in (JWT).
 
@@ -74,7 +74,7 @@ Import: paste your 12 words; you can set HD index (default 0).
 
 Click Save & Continue → backend registers wallet with a random 1–10 ETH mock balance.
 
-Dashboard
+##Dashboard
 
 See your address and balance.
 
@@ -91,7 +91,7 @@ Click Prepare approval → an approval JSON appears with Expires in 30s.
 
 Click Sign & Execute → frontend signs; backend verifies, re-quotes USD to enforce ≤1% slippage, updates balances, logs history, and sends a notification (email if SMTP set, else console).
 
-6) Features mapping (to problem statement)
+##6) Features mapping 
 
 Auth: Login/Register (JWT) 
 
@@ -115,33 +115,33 @@ Notifications: SMTP email or console fallback
 
 Bonus: Object (JSON) signing + quick send to HD index 7 
 
-7) Screenshots / GIF
+##7) Screenshots 
 
-Register page
+##Register page
 <img width="1151" height="577" alt="image" src="https://github.com/user-attachments/assets/68987d4f-732a-4e29-80e0-c347d6074dbd" />
 <img width="1111" height="672" alt="image" src="https://github.com/user-attachments/assets/7621c884-f26e-4758-a8bd-3537821d73c9" />
 
 <img width="1343" height="611" alt="image" src="https://github.com/user-attachments/assets/b90651b0-570d-48d9-a52b-484f31cd3962" />
 
-wallet setup
+##wallet setup
 <img width="1915" height="717" alt="image" src="https://github.com/user-attachments/assets/06078d8b-7c66-40c6-b33d-de4701a02788" />
 
-can create 
+##can create 
 <img width="1354" height="750" alt="image" src="https://github.com/user-attachments/assets/4c7a04cb-7356-4d0b-8ccb-ad07bcee458c" />
 
-or import
+##or import
 <img width="1781" height="789" alt="image" src="https://github.com/user-attachments/assets/10e6686d-b4b2-4df9-946f-d69d4a6c7149" />
 
-dashboard
+##dashboard
 <img width="1833" height="811" alt="image" src="https://github.com/user-attachments/assets/2f7f1bff-b907-4b7b-91f8-e1fd8d7027ef" />
 
-sign and approve the amount
+##sign and approve the amount
 <img width="550" height="645" alt="image" src="https://github.com/user-attachments/assets/b0d5b88f-0e6e-4743-9618-0c2613b808a0" />
 
-history
+##history
 <img width="1760" height="301" alt="image" src="https://github.com/user-attachments/assets/6a75370e-903f-4c89-b3b0-a59055bff239" />
 
-8) API quick reference
+##8) API quick reference
 
 POST /auth/register { email, password } → { access_token }
 
@@ -161,7 +161,7 @@ POST /transfer/execute { approval_id, signature } (JWT) → { status: "ok" }
 
 GET /history (JWT) → { items: [ { ts, sender, recipient, amount_eth, usd_amount? } ] }
 
-9) Sample recipient addresses
+##9) Sample recipient addresses
 
 0x000000000000000000000000000000000000dead
 
@@ -170,3 +170,49 @@ GET /history (JWT) → { items: [ { ts, sender, recipient, amount_eth, usd_amoun
 0x742d35cc6634c0532925a3b8d4c9db96c728b0b4
 
 Or use the HD index 7 quick button.
+
+##  Security
+
+### What’s implemented
+
+- **Account auth (JWT)**
+  - Passwords are **hashed + salted** (bcrypt via `auth.py`).
+  - Short-lived access tokens (configurable, default 90 min) via `create_access_token()`.
+  - Bearer tokens (stored client-side) → avoids CSRF on cookies.
+
+- **CORS allow-list**
+  - Origins restricted via `CORS_ORIGINS` in `.env` (default `http://localhost:5173`) — see `main.py`.
+
+- **Wallet key handling (frontend-only)**
+  - 12-word mnemonic & private key are **generated/held in the browser** (localStorage) for demo only.
+  - **Private keys are never sent** to the backend; only **signatures** are sent.
+
+- **Canonical approval + expiry (anti-replay)**
+  - Transfers use a **canonical JSON payload**:  
+    `{"approval_id","sender","recipient","amount_wei","exp_ms"}` (sorted keys, no spaces).
+  - **Single-use approvals** stored in memory with **30s TTL** (`approvals.py`); consumed with `pop_approval()` so they can’t be reused.
+  - Backend checks `exp_ms` and rejects expired/unknown approvals.
+
+- **Signature verification (ECDSA)**
+  - Backend recovers the signer from the signed message and **matches it to the sender address** (via `eth_account.recover_message`).
+
+- **USD price protection (≤1% slippage)**
+  - For USD sends, backend **re-quotes** with Skip API during `/transfer/execute` and **rejects** if price drift `> 1%`.
+
+- **Amount precision & validation**
+  - ETH values handled in **wei (int)** to avoid float rounding (`utils.eth_to_wei` / `wei_to_eth`).
+  - Recipient address validated with `is_address()`.
+  - **Insufficient funds** check before applying ledger updates.
+
+- **Database safety**
+  - SQLModel/SQLAlchemy used → parameterized queries mitigate SQL injection.
+  - Balance updates & tx record are applied within the same request using the DB session.
+
+- **Secrets & config hygiene**
+  - Secrets kept in **`.env`** (NOT committed); `.gitignore` excludes `.env`, `node_modules`, `venv`, etc.
+  - SMTP credentials (if used) are read from env; if unset, notifications fall back to console.
+
+- **Frontend XSS posture**
+  - React’s default escaping is used; no `dangerouslySetInnerHTML`.
+  - Approval message is **shown as text/JSON**, not rendered as HTML.
+
